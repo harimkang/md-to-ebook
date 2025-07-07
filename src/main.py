@@ -255,27 +255,31 @@ def export_pdf(output_file=None):
     source_root = export_config.get('source_root', project_root)
     book_structure = resolve_book_structure_paths(book_structure, source_root)
     
-    # Collect markdown file list
-    markdown_files = []
+    # Collect markdown files with section information
+    sections_with_files = []
+    total_files = 0
     
-    # Get file list from book_structure
+    # Get sections and files from book_structure
     if 'sections' in book_structure:
         for section in book_structure['sections']:
             if 'files' in section:
-                markdown_files.extend(section['files'])
-    
-    # Remove duplicates
-    markdown_files = list(dict.fromkeys(markdown_files))
+                sections_with_files.append({
+                    'title': section.get('title', 'Untitled Section'),
+                    'files': section['files']
+                })
+                total_files += len(section['files'])
     
     print(f"Project root: {project_root}")
     print(f"Source root: {source_root}")
-    print(f"Number of markdown files to process: {len(markdown_files)}")
+    print(f"Number of sections: {len(sections_with_files)}")
+    print(f"Total markdown files to process: {total_files}")
     
     # Check for missing files
     missing_files = []
-    for file_path in markdown_files:
-        if not os.path.exists(file_path):
-            missing_files.append(file_path)
+    for section in sections_with_files:
+        for file_path in section['files']:
+            if not os.path.exists(file_path):
+                missing_files.append(file_path)
     
     if missing_files:
         print("Warning: The following files could not be found:")
@@ -289,8 +293,8 @@ def export_pdf(output_file=None):
     # Create output directory
     os.makedirs(os.path.dirname(final_output_file), exist_ok=True)
     
-    # Export to PDF
-    pdf_exporter.export_to_pdf(markdown_files, final_output_file)
+    # Export to PDF with section structure
+    pdf_exporter.export_to_pdf_with_sections(sections_with_files, final_output_file)
     
     return True
 
