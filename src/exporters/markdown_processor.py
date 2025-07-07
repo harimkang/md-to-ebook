@@ -1,6 +1,15 @@
 import markdown2
+import re
+from pygments import highlight
+from pygments.lexers import get_lexer_by_name, guess_lexer
+from pygments.formatters import HtmlFormatter
+from pygments.util import ClassNotFound
 
 class MarkdownProcessor:
+    def __init__(self):
+        # Create HTML formatter for syntax highlighting
+        self.formatter = HtmlFormatter(style='default', cssclass='highlight')
+    
     def process_markdown(self, markdown_content):
         # Remove YAML front matter if present
         markdown_content = self.remove_yaml_frontmatter(markdown_content)
@@ -8,9 +17,53 @@ class MarkdownProcessor:
         # Adjust heading levels for proper hierarchy (shift all headings down by 3 levels)
         markdown_content = self.adjust_heading_levels(markdown_content)
         
+        # Apply syntax highlighting to code blocks before markdown processing
+        markdown_content = self.apply_syntax_highlighting(markdown_content)
+        
         # Convert Markdown to HTML using markdown2
-        html_content = markdown2.markdown(markdown_content, extras=['fenced-code-blocks', 'tables', 'header-ids'])
+        html_content = markdown2.markdown(
+            markdown_content, 
+            extras=[
+                'fenced-code-blocks', 
+                'tables', 
+                'header-ids',
+                'code-friendly'
+            ]
+        )
         return html_content
+    
+    def apply_syntax_highlighting(self, content):
+        """Apply syntax highlighting to fenced code blocks"""
+        # Pattern to match fenced code blocks with optional language specification
+        pattern = r'```(\w+)?\n(.*?)```'
+        
+        def highlight_code(match):
+            language = match.group(1) if match.group(1) else None
+            code = match.group(2)
+            
+            if not code.strip():
+                return f'```{language or ""}\n{code}```'
+            
+            try:
+                # Try to get lexer by language name
+                if language:
+                    lexer = get_lexer_by_name(language, stripall=True)
+                else:
+                    # Try to guess the language
+                    lexer = guess_lexer(code)
+                
+                # Generate highlighted HTML
+                highlighted = highlight(code, lexer, self.formatter)
+                
+                # Return the highlighted code wrapped in a div
+                return f'<div class="codehilite">{highlighted}</div>'
+                
+            except ClassNotFound:
+                # If language is not recognized, return original code block
+                return f'```{language or ""}\n{code}```'
+        
+        # Apply highlighting to all code blocks
+        return re.sub(pattern, highlight_code, content, flags=re.DOTALL)
     
     def adjust_heading_levels(self, content):
         """
