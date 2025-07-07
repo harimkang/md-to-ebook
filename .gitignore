@@ -11,3 +11,4 @@ wheels/
 
 config/book_structure.yaml
 config/export_config.yaml
+output/**.pdf
