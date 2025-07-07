@@ -1,0 +1,13 @@
+[project]
+name = "md-to-ebook"
+version = "0.1.0"
+description = "A tool to export Markdown documents to a single PDF file for eBook creation."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "flask>=3.1.1",
+    "jinja2>=3.1.6",
+    "markdown2>=2.5.3",
+    "pyyaml>=6.0.2",
+    "weasyprint>=65.1",
+]
