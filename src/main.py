@@ -36,9 +36,19 @@ def scan_markdown_files(root_path):
     
     return sorted(markdown_files)
 
+def natural_sort_key(text):
+    """
+    Generate a key for natural sorting that handles numbers correctly.
+    This will sort "1", "2", "10" instead of "1", "10", "2".
+    """
+    import re
+    def convert(text):
+        return int(text) if text.isdigit() else text.lower()
+    return [convert(c) for c in re.split('([0-9]+)', text)]
+
 def generate_book_structure(root_path, markdown_files, title=None, author=None):
     """
-    Generate book structure configuration based on markdown files.
+    Generate hierarchical book structure configuration based on markdown files.
     
     Args:
         root_path: Root directory path
@@ -47,41 +57,98 @@ def generate_book_structure(root_path, markdown_files, title=None, author=None):
         author: Book author (optional)
         
     Returns:
-        Dictionary representing book structure
+        Dictionary representing hierarchical book structure
     """
     sections = {}
     
     for file_path in markdown_files:
-        # Extract section from path
+        # Extract section and subsection from path
         parts = file_path.split(os.sep)
         if len(parts) >= 3 and parts[0] == 'docs':
-            section_dir = parts[1]
-            # Extract section title from directory name
-            if '-' in section_dir:
-                section_parts = section_dir.split('-', 1)
-                if len(section_parts) > 1:
-                    section_title = section_parts[1].replace('-', ' ').title()
+            # Extract major section (e.g., "1-cs-전공-지식" -> "CS 전공 지식")
+            major_section_dir = parts[1]
+            major_order = ""
+            if '-' in major_section_dir:
+                major_parts = major_section_dir.split('-', 1)  # Split only once to separate number and title
+                if len(major_parts) >= 2:
+                    major_order = major_parts[0]  # Store ordering number
+                    major_title = major_parts[1].replace('-', ' ').title()
                 else:
-                    section_title = section_dir.replace('-', ' ').title()
+                    major_title = major_section_dir.replace('-', ' ').title()
             else:
-                section_title = section_dir.replace('-', ' ').title()
+                major_title = major_section_dir.replace('-', ' ').title()
             
-            if section_title not in sections:
-                sections[section_title] = []
-            sections[section_title].append(file_path)
+            # Extract minor section if exists (e.g., "1-1-운영체제" -> "운영체제")
+            minor_title = None
+            minor_order = ""
+            if len(parts) >= 4:
+                minor_section_dir = parts[2]
+                if '-' in minor_section_dir:
+                    minor_parts = minor_section_dir.split('-', 2)  # Split at most 2 times
+                    if len(minor_parts) >= 3:
+                        minor_order = minor_parts[1]  # Store ordering number
+                        minor_title = minor_parts[2].replace('-', ' ').title()
+                    else:
+                        minor_title = minor_section_dir.replace('-', ' ').title()
+                else:
+                    minor_title = minor_section_dir.replace('-', ' ').title()
+            
+            # Create section key with ordering for proper sorting
+            section_key = f"{major_order}_{major_title}" if major_order else major_title
+            
+            # Initialize major section if not exists
+            if section_key not in sections:
+                sections[section_key] = {
+                    'title': major_title,
+                    'order': major_order,
+                    'subsections': {}
+                }
+            
+            # Add to appropriate subsection or main section
+            if minor_title:
+                subsection_key = f"{minor_order}_{minor_title}" if minor_order else minor_title
+                if subsection_key not in sections[section_key]['subsections']:
+                    sections[section_key]['subsections'][subsection_key] = {
+                        'title': minor_title,
+                        'order': minor_order,
+                        'files': []
+                    }
+                sections[section_key]['subsections'][subsection_key]['files'].append(file_path)
+            else:
+                # File directly under major section
+                if '_direct_files' not in sections[section_key]:
+                    sections[section_key]['_direct_files'] = []
+                sections[section_key]['_direct_files'].append(file_path)
     
-    # Convert to the expected format
+    # Convert to the expected hierarchical format
     book_structure = {
         'title': title or 'Title of the Book',
         'author': author or 'Author Name',
         'sections': []
     }
     
-    for title, files in sections.items():
-        book_structure['sections'].append({
-            'title': title,
-            'files': sorted(files)
-        })
+    # Sort sections by their ordering number
+    sorted_sections = sorted(sections.items(), key=lambda x: natural_sort_key(x[0]))
+    
+    for section_key, section_info in sorted_sections:
+        section_data = {
+            'title': section_info['title'],
+            'subsections': []
+        }
+        
+        # Add direct files if any
+        if '_direct_files' in section_info:
+            section_data['files'] = sorted(section_info['_direct_files'], key=natural_sort_key)
+        
+        # Sort and add subsections
+        sorted_subsections = sorted(section_info['subsections'].items(), key=lambda x: natural_sort_key(x[0]))
+        for subsection_key, subsection_info in sorted_subsections:
+            section_data['subsections'].append({
+                'title': subsection_info['title'],
+                'files': sorted(subsection_info['files'], key=natural_sort_key)
+            })
+        
+        book_structure['sections'].append(section_data)
     
     return book_structure
 
@@ -255,36 +322,56 @@ def export_pdf(output_file=None):
     source_root = export_config.get('source_root', project_root)
     book_structure = resolve_book_structure_paths(book_structure, source_root)
     
-    # Collect markdown files with section information
+    # Collect markdown files with hierarchical section information
     sections_with_files = []
     total_files = 0
     
-    # Get sections and files from book_structure
+    # Get sections and files from book_structure (supporting hierarchical structure)
     if 'sections' in book_structure:
         for section in book_structure['sections']:
-            if 'files' in section:
+            section_title = section.get('title', 'Untitled Section')
+            
+            # Handle hierarchical structure with subsections
+            if 'subsections' in section and section['subsections']:
+                # Add major section header
                 sections_with_files.append({
-                    'title': section.get('title', 'Untitled Section'),
-                    'files': section['files']
+                    'title': section_title,
+                    'type': 'major_section',
+                    'files': []
                 })
-                total_files += len(section['files'])
+                
+                # Add direct files of major section if any
+                if 'files' in section and section['files']:
+                    sections_with_files.append({
+                        'title': f"{section_title} - General",
+                        'type': 'subsection',
+                        'files': section['files']
+                    })
+                    total_files += len(section['files'])
+                
+                # Add each subsection
+                for subsection in section['subsections']:
+                    if 'files' in subsection:
+                        sections_with_files.append({
+                            'title': subsection.get('title', 'Untitled Subsection'),
+                            'type': 'subsection',
+                            'files': subsection['files']
+                        })
+                        total_files += len(subsection['files'])
+            else:
+                # Handle old flat structure or sections with only direct files
+                if 'files' in section:
+                    sections_with_files.append({
+                        'title': section_title,
+                        'type': 'section',
+                        'files': section['files']
+                    })
+                    total_files += len(section['files'])
     
     print(f"Project root: {project_root}")
     print(f"Source root: {source_root}")
     print(f"Number of sections: {len(sections_with_files)}")
     print(f"Total markdown files to process: {total_files}")
-    
-    # Check for missing files
-    missing_files = []
-    for section in sections_with_files:
-        for file_path in section['files']:
-            if not os.path.exists(file_path):
-                missing_files.append(file_path)
-    
-    if missing_files:
-        print("Warning: The following files could not be found:")
-        for missing_file in missing_files:
-            print(f"  - {missing_file}")
     
     # Initialize PDF exporter and execute
     pdf_exporter = PdfExporter(export_config)

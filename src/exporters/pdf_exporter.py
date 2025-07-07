@@ -121,47 +121,78 @@ class PdfExporter:
 
     def export_to_pdf_with_sections(self, sections_with_files, output_path):
         """
-        Export PDF with section structure.
+        Export PDF with hierarchical section structure.
         
         Args:
-            sections_with_files: List of dictionaries with 'title' and 'files' keys
+            sections_with_files: List of dictionaries with 'title', 'type', and 'files' keys
             output_path: Output PDF file path
         """
         # Initialize the Markdown processor
         processor = MarkdownProcessor()
+
+        # Get source root from config to resolve file paths
+        source_root = self.config.get('source_root', '')
+        missing_files = []
 
         # Process each section and its files
         html_content = ""
         
         for section_info in sections_with_files:
             section_title = section_info.get('title', 'Untitled Section')
+            section_type = section_info.get('type', 'section')
             section_files = section_info.get('files', [])
             
-            # Add section header with page break
-            html_content += f"""
-            <div class="section-header">
-                <h1 class="section-title">{section_title}</h1>
-            </div>
-            """
+            # Add appropriate section header based on type
+            if section_type == 'major_section':
+                # Major section header (H2 level - under book title H1)
+                html_content += f"""
+                <div class="major-section-header">
+                    <h2 class="major-section-title">{section_title}</h2>
+                </div>
+                """
+            elif section_type == 'subsection':
+                # Subsection header (H3 level - under major section H2)
+                html_content += f"""
+                <div class="subsection-header">
+                    <h3 class="subsection-title">{section_title}</h3>
+                </div>
+                """
+            else:
+                # Regular section header (backward compatibility - H2 level)
+                html_content += f"""
+                <div class="section-header">
+                    <h2 class="section-title">{section_title}</h2>
+                </div>
+                """
             
-            # Process each file in the section
-            for md_file in section_files:
-                if os.path.exists(md_file):
-                    with open(md_file, 'r', encoding='utf-8') as file:
-                        md_content = file.read()
-                    
-                    # Process markdown and add to content
-                    file_html = processor.process_markdown(md_content)
-                    html_content += file_html
-                    
-                    # Add page break after each file (optional)
-                    html_content += "<div style='page-break-after: always;'></div>"
-                else:
-                    print(f"Warning: Markdown file not found: {md_file}")
-                    continue
+            # Process each file in the section (only if there are files)
+            if section_files:
+                for md_file in section_files:
+                    if os.path.exists(md_file):
+                        with open(md_file, 'r', encoding='utf-8') as file:
+                            md_content = file.read()
+                        
+                        # Process markdown and add to content
+                        file_html = processor.process_markdown(md_content)
+                        html_content += file_html
+                        
+                        # Add page break after each file (optional)
+                        html_content += "<div style='page-break-after: always;'></div>"
+                    else:
+                        missing_files.append(md_file)
+                        continue
             
-            # Add section break (new page for next section)
-            html_content += "<div style='page-break-before: always;'></div>"
+            # Add section break for major sections (new page for next major section)
+            if section_type == 'major_section':
+                html_content += "<div style='page-break-before: always;'></div>"
+
+        # Report missing files
+        if missing_files:
+            print("Warning: The following files could not be found:")
+            for file in missing_files:
+                print(f"  - {file}")
+            print(f"Source root: {source_root}")
+            print(f"Current working directory: {os.getcwd()}")
 
         # Load the HTML template
         if self.template_path and os.path.exists(self.template_path):
@@ -174,11 +205,11 @@ class PdfExporter:
             template = template.replace('{{ title }}', title)
             template = template.replace('{{ author }}', author)
         else:
-            # Use default template with sections support
+            # Use default template with hierarchical sections support
             title = self.config.get('title', 'Title of the Book')
             author = self.config.get('author', 'Author Name')
             font_settings = self.config.get('font_settings', {})
-            template = self._generate_default_template_with_sections(title, author, font_settings)
+            template = self._generate_default_template_with_hierarchical_sections(title, author, font_settings)
 
         # Apply font settings to existing template if configured
         font_settings = self.config.get('font_settings', {})
@@ -196,9 +227,11 @@ class PdfExporter:
             html_doc.write_pdf(output_path)
 
         print(f"PDF successfully generated: {output_path}")
+        if missing_files:
+            print(f"Note: {len(missing_files)} files were missing and not included in the PDF.")
     
-    def _generate_default_template_with_sections(self, title, author, font_settings):
-        """Generate default template with section styling support"""
+    def _generate_default_template_with_hierarchical_sections(self, title, author, font_settings):
+        """Generate default template with hierarchical section styling support"""
         base_font_size = font_settings.get('base_font_size', '12pt')
         line_height = font_settings.get('line_height', '1.6')
         h1_size = font_settings.get('h1_size', '24pt')
@@ -240,6 +273,43 @@ class PdfExporter:
                     font-style: italic;
                     margin-top: 20px;
                 }}
+                /* Major section styles */
+                .major-section-header {{
+                    text-align: center;
+                    margin: 60px 0 40px 0;
+                    padding: 40px 0;
+                    border-top: 4px solid #007acc;
+                    border-bottom: 2px solid #007acc;
+                    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+                    page-break-before: always;
+                    page-break-after: avoid;
+                }}
+                .major-section-title {{
+                    font-size: calc({h1_size} + 6pt);
+                    color: #007acc;
+                    margin: 0;
+                    font-weight: bold;
+                    text-transform: uppercase;
+                    letter-spacing: 3px;
+                    text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+                }}
+                /* Subsection styles */
+                .subsection-header {{
+                    margin: 40px 0 20px 0;
+                    padding: 20px 0;
+                    border-left: 4px solid #28a745;
+                    padding-left: 20px;
+                    background-color: #f8f9fa;
+                    page-break-after: avoid;
+                }}
+                .subsection-title {{
+                    font-size: {h1_size};
+                    color: #28a745;
+                    margin: 0;
+                    font-weight: bold;
+                    letter-spacing: 1px;
+                }}
+                /* Regular section styles (backward compatibility) */
                 .section-header {{
                     text-align: center;
                     margin: 50px 0;
@@ -256,9 +326,52 @@ class PdfExporter:
                     text-transform: uppercase;
                     letter-spacing: 2px;
                 }}
-                h1 {{ color: #333; font-size: {h1_size}; page-break-before: avoid; }}
-                h2 {{ color: #333; font-size: {h2_size}; }}
-                h3 {{ color: #333; font-size: {h3_size}; }}
+                /* Content styles - Proper hierarchy */
+                h1 {{ 
+                    color: #333; 
+                    font-size: {h1_size}; 
+                    page-break-before: avoid; 
+                    margin-top: 30px;
+                    margin-bottom: 20px;
+                    text-align: center;
+                }}
+                h2 {{ 
+                    color: #007acc; 
+                    font-size: calc({h1_size} + 4pt);
+                    margin-top: 40px;
+                    margin-bottom: 25px;
+                    border-bottom: 2px solid #007acc;
+                    padding-bottom: 10px;
+                }}
+                h3 {{ 
+                    color: #28a745; 
+                    font-size: {h1_size};
+                    margin-top: 30px;
+                    margin-bottom: 20px;
+                    border-left: 4px solid #28a745;
+                    padding-left: 15px;
+                }}
+                h4 {{ 
+                    color: #333; 
+                    font-size: {h2_size};
+                    margin-top: 25px;
+                    margin-bottom: 15px;
+                    border-bottom: 1px solid #ddd;
+                    padding-bottom: 5px;
+                }}
+                h5 {{ 
+                    color: #555; 
+                    font-size: {h3_size};
+                    margin-top: 20px;
+                    margin-bottom: 10px;
+                }}
+                h6 {{ 
+                    color: #666; 
+                    font-size: calc({h3_size} - 2pt);
+                    margin-top: 15px;
+                    margin-bottom: 8px;
+                    font-style: italic;
+                }}
                 code {{ 
                     background-color: #f4f4f4; 
                     padding: 2px 4px; 

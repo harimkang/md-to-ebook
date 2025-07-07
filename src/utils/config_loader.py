@@ -63,6 +63,7 @@ def resolve_book_structure_paths(book_structure, source_root):
     
     if 'sections' in resolved_structure:
         for section in resolved_structure['sections']:
+            # Handle direct files in the section
             if 'files' in section:
                 resolved_files = []
                 for file_path in section['files']:
@@ -71,5 +72,17 @@ def resolve_book_structure_paths(book_structure, source_root):
                     else:
                         resolved_files.append(file_path)
                 section['files'] = resolved_files
+            
+            # Handle subsections (hierarchical structure)
+            if 'subsections' in section:
+                for subsection in section['subsections']:
+                    if 'files' in subsection:
+                        resolved_files = []
+                        for file_path in subsection['files']:
+                            if not os.path.isabs(file_path):
+                                resolved_files.append(os.path.join(source_root, file_path))
+                            else:
+                                resolved_files.append(file_path)
+                        subsection['files'] = resolved_files
     
     return resolved_structure
