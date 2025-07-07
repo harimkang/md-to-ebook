@@ -6,12 +6,13 @@ import yaml
 from exporters.pdf_exporter import PdfExporter
 from utils.config_loader import load_config, resolve_paths, resolve_book_structure_paths
 
-def scan_markdown_files(root_path):
+def scan_markdown_files(root_path, exclude_folders=None):
     """
     Scan a directory for markdown files and organize them by structure.
     
     Args:
         root_path: Root directory to scan for markdown files
+        exclude_folders: List of folder paths to exclude (relative to root_path)
         
     Returns:
         List of markdown files organized by directory structure
@@ -23,8 +24,29 @@ def scan_markdown_files(root_path):
         print(f"Warning: docs directory not found at {docs_path}")
         return []
     
+    # Convert exclude_folders to absolute paths for comparison
+    exclude_paths = []
+    if exclude_folders:
+        for folder in exclude_folders:
+            # Handle both relative and absolute paths
+            if os.path.isabs(folder):
+                exclude_paths.append(folder)
+            else:
+                exclude_paths.append(os.path.join(root_path, folder))
+    
     # Walk through the docs directory
     for root, dirs, files in os.walk(docs_path):
+        # Check if current directory should be excluded
+        should_exclude = False
+        for exclude_path in exclude_paths:
+            if os.path.abspath(root).startswith(os.path.abspath(exclude_path)):
+                should_exclude = True
+                break
+        
+        if should_exclude:
+            print(f"Excluding directory: {root}")
+            continue
+        
         # Sort directories and files for consistent ordering
         dirs.sort()
         files.sort()
@@ -72,11 +94,11 @@ def generate_book_structure(root_path, markdown_files, title=None, author=None):
                 major_parts = major_section_dir.split('-', 1)  # Split only once to separate number and title
                 if len(major_parts) >= 2:
                     major_order = major_parts[0]  # Store ordering number
-                    major_title = major_parts[1].replace('-', ' ').title()
+                    major_title = major_parts[1].replace('-', ' ').upper()  # Convert to uppercase
                 else:
-                    major_title = major_section_dir.replace('-', ' ').title()
+                    major_title = major_section_dir.replace('-', ' ').upper()
             else:
-                major_title = major_section_dir.replace('-', ' ').title()
+                major_title = major_section_dir.replace('-', ' ').upper()
             
             # Extract minor section if exists (e.g., "1-1-운영체제" -> "운영체제")
             minor_title = None
@@ -152,7 +174,7 @@ def generate_book_structure(root_path, markdown_files, title=None, author=None):
     
     return book_structure
 
-def generate_export_config(root_path, output_file=None, font_size=None):
+def generate_export_config(root_path, output_file=None, font_size=None, exclude_folders=None):
     """
     Generate export configuration.
     
@@ -160,12 +182,16 @@ def generate_export_config(root_path, output_file=None, font_size=None):
         root_path: Root directory path
         output_file: Output PDF file path
         font_size: Base font size (e.g., 'small', 'medium', 'large', or specific size like '14pt')
+        exclude_folders: List of folders to exclude from processing
         
     Returns:
         Dictionary representing export configuration
     """
     if output_file is None:
         output_file = 'output/ebook.pdf'
+    
+    if exclude_folders is None:
+        exclude_folders = []
     
     # Font size presets
     font_presets = {
@@ -225,10 +251,11 @@ def generate_export_config(root_path, output_file=None, font_size=None):
         'template': 'src/templates/pdf_template.html',
         'css': 'src/templates/styles.css',
         'source_root': root_path,
+        'exclude_folders': exclude_folders,
         'font_settings': font_settings
     }
 
-def build_config_files(source_path, output_file=None, title=None, author=None, font_size=None):
+def build_config_files(source_path, output_file=None, title=None, author=None, font_size=None, exclude_folders=None):
     """
     Build configuration files based on source path.
     
@@ -238,14 +265,29 @@ def build_config_files(source_path, output_file=None, title=None, author=None, f
         title: Book title (optional)
         author: Book author (optional)
         font_size: Font size preset or custom size (optional)
+        exclude_folders: List of folders to exclude (optional)
     """
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(script_dir)
     
+    # Try to load existing export config to get exclude_folders if not provided
+    if exclude_folders is None:
+        export_config_path = os.path.join(project_root, 'config', 'export_config.yaml')
+        if os.path.exists(export_config_path):
+            try:
+                existing_config = load_config(export_config_path)
+                exclude_folders = existing_config.get('exclude_folders', [])
+            except Exception:
+                exclude_folders = []
+        else:
+            exclude_folders = []
+    
     print(f"Scanning markdown files in: {source_path}")
+    if exclude_folders:
+        print(f"Excluding folders: {exclude_folders}")
     
     # Scan for markdown files
-    markdown_files = scan_markdown_files(source_path)
+    markdown_files = scan_markdown_files(source_path, exclude_folders)
     
     if not markdown_files:
         print("No markdown files found!")
@@ -255,7 +297,7 @@ def build_config_files(source_path, output_file=None, title=None, author=None, f
     
     # Generate configurations
     book_structure = generate_book_structure(source_path, markdown_files, title, author)
-    export_config = generate_export_config(source_path, output_file, font_size)
+    export_config = generate_export_config(source_path, output_file, font_size, exclude_folders)
     
     # Ensure config directory exists
     config_dir = os.path.join(project_root, 'config')
@@ -333,11 +375,33 @@ def export_pdf(output_file=None):
             
             # Handle hierarchical structure with subsections
             if 'subsections' in section and section['subsections']:
-                # Add major section header
+                # Prepare table of contents for major section (중분류까지만)
+                toc_items = []
+                subsection_counter = 1
+                
+                # Add direct files of major section if any
+                if 'files' in section and section['files']:
+                    toc_items.append({
+                        'number': f"{subsection_counter}",
+                        'title': f"{section_title} - General"
+                    })
+                    subsection_counter += 1
+                
+                # Add each subsection to TOC (중분류 제목만, 파일 목록 제외)
+                for subsection in section['subsections']:
+                    if 'files' in subsection:
+                        toc_items.append({
+                            'number': f"{subsection_counter}",
+                            'title': subsection.get('title', 'Untitled Subsection')
+                        })
+                        subsection_counter += 1
+                
+                # Add major section header with table of contents
                 sections_with_files.append({
                     'title': section_title,
                     'type': 'major_section',
-                    'files': []
+                    'files': [],
+                    'toc': toc_items
                 })
                 
                 # Add direct files of major section if any
@@ -445,7 +509,7 @@ def interactive_mode():
     print("3. Large (14pt)")
     print("4. Custom size")
     
-    font_choice = input("Select font size [2]: ").strip()
+    font_choice = input("Select font size [1]: ").strip()
     font_size = None
     
     if font_choice == '1':
@@ -465,17 +529,32 @@ def interactive_mode():
         font_size = 'small'
     
     print()
+    
+    # Get exclude folders
+    print("🚫 Exclude Folders:")
+    print("Enter folders to exclude from processing (relative to source path)")
+    print("Example: docs/assets docs/temp")
+    print("Leave empty to include all folders")
+    
+    exclude_input = input("Enter folders to exclude [none]: ").strip()
+    exclude_folders = []
+    if exclude_input:
+        exclude_folders = exclude_input.split()
+    
+    print()
     print("🔄 Processing...")
     print(f"   Title: {title}")
     print(f"   Author: {author}")
     print(f"   Source: {source_path}")
     print(f"   Output: {output_file}")
     print(f"   Font Size: {font_size}")
+    if exclude_folders:
+        print(f"   Exclude Folders: {', '.join(exclude_folders)}")
     print()
     
     # Build configuration files
     try:
-        success = build_config_files(source_path, output_file, title, author, font_size)
+        success = build_config_files(source_path, output_file, title, author, font_size, exclude_folders)
         if not success:
             print("❌ Failed to build configuration files.")
             return False
@@ -534,6 +613,9 @@ Examples:
   # Generate config with large font size
   python src/main.py --path /path/to/markdown/root --build --font-size large
   
+  # Generate config excluding specific folders
+  python src/main.py --path /path/to/markdown/root --build --exclude-folders docs/assets docs/temp
+  
   # Export PDF using existing config files  
   python src/main.py --export output/ebook.pdf
   
@@ -557,6 +639,9 @@ Examples:
     parser.add_argument('--font-size',
                        choices=['small', 'medium', 'large'],
                        help='Font size preset: small (10pt), medium (12pt), large (14pt) (used with --build)')
+    parser.add_argument('--exclude-folders',
+                       nargs='*',
+                       help='Folders to exclude from processing (used with --build). Example: docs/assets docs/temp')
     
     args = parser.parse_args()
     
@@ -571,8 +656,8 @@ Examples:
     if not args.build and not args.export:
         parser.error("At least one of --build or --export must be specified")
     
-    if (args.title or args.author or args.font_size) and not args.build:
-        parser.error("--title, --author, and --font-size can only be used with --build")
+    if (args.title or args.author or args.font_size or args.exclude_folders) and not args.build:
+        parser.error("--title, --author, --font-size, and --exclude-folders can only be used with --build")
     
     success = True
     
@@ -587,7 +672,8 @@ Examples:
             return 1
         
         output_file = args.export if args.export else None
-        success = build_config_files(args.path, output_file, args.title, args.author, args.font_size)
+        exclude_folders = args.exclude_folders if args.exclude_folders else []
+        success = build_config_files(args.path, output_file, args.title, args.author, args.font_size, exclude_folders)
         
         if not success:
             return 1

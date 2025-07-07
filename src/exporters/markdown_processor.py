@@ -1,5 +1,4 @@
 import markdown2
-import re
 
 class MarkdownProcessor:
     def process_markdown(self, markdown_content):
@@ -73,16 +72,30 @@ class MarkdownProcessor:
         Returns:
             Markdown content with YAML front matter removed
         """
-        # Pattern to match YAML front matter
-        # ^--- starts at beginning of file
-        # .*? matches any content (non-greedy)
-        # ^--- matches closing delimiter on a new line
-        pattern = r'^---\s*\n.*?\n---\s*\n'
+        # Check if content starts with YAML front matter delimiter
+        if not content.strip().startswith('---'):
+            return content
         
-        # Remove the front matter using regex with DOTALL flag to match newlines
-        cleaned_content = re.sub(pattern, '', content, flags=re.DOTALL | re.MULTILINE)
+        # Find the end of the YAML front matter
+        # Look for the closing --- on a line by itself
+        lines = content.split('\n')
+        end_index = None
         
-        # Remove any leading whitespace that might be left
-        cleaned_content = cleaned_content.lstrip()
+        # Start from line 1 (skip the opening ---)
+        for i in range(1, len(lines)):
+            line = lines[i].strip()
+            if line == '---':
+                end_index = i
+                break
         
-        return cleaned_content
+        # If we found the closing delimiter, remove the front matter
+        if end_index is not None:
+            # Keep everything after the closing --- line
+            remaining_lines = lines[end_index + 1:]
+            cleaned_content = '\n'.join(remaining_lines)
+            # Remove any leading whitespace that might be left
+            cleaned_content = cleaned_content.lstrip()
+            return cleaned_content
+        
+        # If no closing delimiter found, return original content
+        return content

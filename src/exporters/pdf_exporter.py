@@ -144,10 +144,22 @@ class PdfExporter:
             
             # Add appropriate section header based on type
             if section_type == 'major_section':
-                # Major section header (H2 level - under book title H1)
+                # Major section header (H2 level - under book title H1) with table of contents
+                toc_html = ""
+                if 'toc' in section_info and section_info['toc']:
+                    toc_html = "<div class='major-section-toc'>"
+                    for toc_item in section_info['toc']:
+                        toc_html += f"""
+                        <div class='toc-item'>
+                            <div class='toc-section-title'>{toc_item['number']}. {toc_item['title']}</div>
+                        </div>
+                        """
+                    toc_html += "</div>"
+                
                 html_content += f"""
                 <div class="major-section-header">
                     <h2 class="major-section-title">{section_title}</h2>
+                    {toc_html}
                 </div>
                 """
             elif section_type == 'subsection':
@@ -277,7 +289,7 @@ class PdfExporter:
                 .major-section-header {{
                     text-align: center;
                     margin: 60px 0 40px 0;
-                    padding: 40px 0;
+                    padding: 40px 30px;
                     border-top: 4px solid #007acc;
                     border-bottom: 2px solid #007acc;
                     background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
@@ -287,11 +299,33 @@ class PdfExporter:
                 .major-section-title {{
                     font-size: calc({h1_size} + 6pt);
                     color: #007acc;
-                    margin: 0;
+                    margin: 0 0 30px 0;
                     font-weight: bold;
                     text-transform: uppercase;
                     letter-spacing: 3px;
                     text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+                }}
+                /* Table of contents styles for major sections */
+                .major-section-toc {{
+                    text-align: left;
+                    margin-top: 40px;
+                    padding: 20px;
+                    background-color: rgba(255, 255, 255, 0.8);
+                    border-radius: 8px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                }}
+                .toc-item {{
+                    margin-bottom: 15px;
+                }}
+                .toc-section-title {{
+                    color: #007acc;
+                    font-size: {h3_size};
+                    margin: 0;
+                    font-weight: bold;
+                    padding: 10px 15px;
+                    background-color: rgba(0, 122, 204, 0.1);
+                    border-left: 4px solid #007acc;
+                    border-radius: 4px;
                 }}
                 /* Subsection styles */
                 .subsection-header {{
@@ -358,6 +392,7 @@ class PdfExporter:
                     margin-bottom: 15px;
                     border-bottom: 1px solid #ddd;
                     padding-bottom: 5px;
+                    font-weight: bold;
                 }}
                 h5 {{ 
                     color: #555; 
