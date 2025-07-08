@@ -4,11 +4,14 @@ from pygments import highlight
 from pygments.lexers import get_lexer_by_name, guess_lexer
 from pygments.formatters import HtmlFormatter
 from pygments.util import ClassNotFound
+from utils.mermaid_renderer import MermaidRenderer
 
 class MarkdownProcessor:
     def __init__(self):
         # Create HTML formatter for syntax highlighting
         self.formatter = HtmlFormatter(style='default', cssclass='highlight')
+        # Initialize Mermaid renderer
+        self.mermaid_renderer = MermaidRenderer()
     
     def process_markdown(self, markdown_content):
         # Remove YAML front matter if present
@@ -33,7 +36,7 @@ class MarkdownProcessor:
         return html_content
     
     def apply_syntax_highlighting(self, content):
-        """Apply syntax highlighting to fenced code blocks"""
+        """Apply syntax highlighting to fenced code blocks and render Mermaid diagrams"""
         # Pattern to match fenced code blocks with optional language specification
         pattern = r'```(\w+)?\n(.*?)```'
         
@@ -43,6 +46,16 @@ class MarkdownProcessor:
             
             if not code.strip():
                 return f'```{language or ""}\n{code}```'
+            
+            # Handle Mermaid diagrams
+            if language and language.lower() == 'mermaid':
+                try:
+                    svg_content = self.mermaid_renderer.render_mermaid_sync(code.strip())
+                    return f'<div class="mermaid-diagram" style="text-align: center; margin: 20px 0;">{svg_content}</div>'
+                except Exception as e:
+                    print(f"Warning: Failed to render Mermaid diagram: {e}")
+                    # Fallback to regular code block
+                    return f'<pre><code class="language-mermaid">{code}</code></pre>'
             
             try:
                 # Try to get lexer by language name

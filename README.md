@@ -16,6 +16,7 @@ This project provides a simple and efficient way to convert Markdown documents i
 - Customizable PDF layout using HTML templates and CSS styles.
 - Easy configuration through YAML files.
 - Supports various Markdown features including code blocks and tables.
+- Supports various mermaid graphs and charts.
 - **Automatically removes YAML front matter** from markdown files (e.g., metadata headers with title, date, tags).
 - Interactive mode for easy setup.
 - Command-line interface for automation and scripting.
@@ -27,7 +28,13 @@ This project provides a simple and efficient way to convert Markdown documents i
 To install the required dependencies, run:
 
 ```bash
+uv sync
+
+# OR
 pip install -r requirements.txt
+
+# For Mermaid build
+playwright install chromium
 ```
 
 ## Usage

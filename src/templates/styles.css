@@ -199,3 +199,57 @@ a {
 a:hover {
     text-decoration: underline;
 }
+
+/* Mermaid diagram styles */
+.mermaid-diagram {
+    text-align: center;
+    margin: 20px 0;
+    padding: 20px;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.mermaid-diagram svg {
+    max-width: 100%;
+    height: auto;
+    background: white;
+}
+
+/* Ensure Mermaid text is visible */
+.mermaid-diagram text {
+    fill: #111827 !important;
+    font-weight: 500;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+/* Mermaid diagram elements styling */
+.mermaid-diagram .node rect,
+.mermaid-diagram .node circle,
+.mermaid-diagram .node ellipse,
+.mermaid-diagram .node polygon {
+    stroke: #374151 !important;
+    stroke-width: 2px !important;
+    fill: #f9fafb !important;
+}
+
+.mermaid-diagram .edgePath path {
+    stroke: #374151 !important;
+    stroke-width: 2px !important;
+}
+
+.mermaid-diagram .arrowheadPath {
+    fill: #374151 !important;
+    stroke: #374151 !important;
+}
+
+.mermaid-diagram .edgeLabel {
+    background-color: white !important;
+    color: #111827 !important;
+}
+
+/* Page break handling for diagrams */
+.mermaid-diagram {
+    page-break-inside: avoid;
+}
